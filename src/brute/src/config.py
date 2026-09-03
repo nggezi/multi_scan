@@ -178,7 +178,7 @@ DEFAULT_CREDENTIALS = {
     4: (["admin"], ["admin"]),
     5: (["admin"], ["admin"]),
     6: (["root"], ["password"]),
-    7: (["2cXaAxRGfddmGz2yx1wA"], ["2cXaAxRGfddmGz2yx1wA"]),
+    7: (["admin"], ["admin"]),
     8: (["root"], ["password"]),
 }
 

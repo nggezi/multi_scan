@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# scan_all.sh - 一键扫描+爆破
+# scan_all.sh - 一键端口扫描+爆破
 #
 # 用法:
 #   bash scan_all.sh <网段文件> [爆破模式]
 #
 # 爆破模式:
-#   - 不指定: 根据指纹结果自动匹配
-#   - 数字1-8: 强制使用指定模式（跳过指纹识别，直接用该模式爆破所有开放端口）
+#   - 不指定: 根据端口号自动匹配爆破模式
+#   - 数字1-8: 强制使用指定模式（跳过端口映射，直接用该模式爆破所有开放端口）
 #
 
 set -Eeuo pipefail
@@ -19,7 +19,7 @@ if [[ $# -lt 1 ]]; then
     echo "用法: bash scan_all.sh <网段文件> [爆破模式(1-8)]" >&2
     echo "" >&2
     echo "示例:" >&2
-    echo "  bash scan_all.sh subnets.txt           # 自动指纹+爆破" >&2
+    echo "  bash scan_all.sh subnets.txt           # 端口映射自动爆破" >&2
     echo "  bash scan_all.sh subnets.txt 1         # 强制模式1爆破" >&2
     echo "  bash scan_all.sh subnets.txt 6         # 强制SSH爆破" >&2
     exit 1
@@ -39,22 +39,28 @@ SCANNER_DIR="$SCRIPT_DIR/src/scanner"
 BRUTE_DIR="$SCRIPT_DIR/src/brute"
 OUTPUT_DIR="$SCRIPT_DIR/output"
 PORTS_DIR="$OUTPUT_DIR/ports"
-FINGERPRINT_DIR="$OUTPUT_DIR/fingerprint"
 BRUTE_OUT_DIR="$OUTPUT_DIR/brute"
 
-# ── 指纹→模式映射 ──
-declare -A FINGERPRINT_MODE_MAP=(
-    ["x-ui.txt"]=1
-    ["nezha.txt"]=2
-    ["hui.txt"]=3
-    ["xiandan.txt"]=4
-    ["sui.txt"]=5
-    ["substore.txt"]=7
-    ["openwrt.txt"]=8
+# ── 端口→模式映射 ──
+declare -A PORT_MODE_MAP=(
+    [22]="6"
+    [80]="1,2,3,4,5,7,8"
+    [443]="1,2,3,4,5,7,8"
+    [8080]="1,2,3,4,5,7,8"
+    [8443]="1,2,3,4,5,7,8"
+    [2053]="1"
+    [2083]="1"
+    [2087]="1"
+    [2095]="5"
+    [2096]="5"
+    [54321]="1"
+    [8008]="2"
+    [3000]="2,7"
+    [3001]="7"
 )
 
 echo "========================================"
-echo "  综合扫描+爆破工具"
+echo "  端口扫描 + 自动爆破"
 echo "========================================"
 echo ""
 echo "网段文件: $SUBNET_FILE"
@@ -64,7 +70,7 @@ echo ""
 # ════════════════════════════════════════
 # 阶段 1: 端口扫描
 # ════════════════════════════════════════
-echo ">>> 阶段 1/3: nmap 端口扫描"
+echo ">>> 阶段 1/2: nmap 端口扫描"
 echo ""
 
 mkdir -p "$PORTS_DIR"
@@ -78,33 +84,9 @@ echo ">>> 端口扫描完成"
 echo ""
 
 # ════════════════════════════════════════
-# 阶段 2: 指纹识别（仅自动模式）
+# 阶段 2: 端口映射爆破
 # ════════════════════════════════════════
-if [[ -z "$FORCE_MODE" ]]; then
-    echo ">>> 阶段 2/3: HTTP/HTTPS 指纹识别"
-    echo ""
-
-    mkdir -p "$FINGERPRINT_DIR"
-    # 清空旧的指纹结果
-    rm -f -- "$FINGERPRINT_DIR"/*.txt "$FINGERPRINT_DIR"/*.tsv 2>/dev/null || true
-
-    python3 "$SCANNER_DIR/fingerprint.py" \
-        --result-dir "$PORTS_DIR" \
-        --rules "$CONFIG_DIR/rules.conf" \
-        --out-dir "$FINGERPRINT_DIR"
-
-    echo ""
-    echo ">>> 指纹识别完成"
-    echo ""
-else
-    echo ">>> 跳过指纹识别（强制模式 $FORCE_MODE）"
-    echo ""
-fi
-
-# ════════════════════════════════════════
-# 阶段 3: 爆破
-# ════════════════════════════════════════
-echo ">>> 阶段 3/3: 爆破"
+echo ">>> 阶段 2/2: 端口映射爆破"
 echo ""
 
 # 确保 brute 临时目录存在
@@ -179,33 +161,61 @@ if [[ -n "$FORCE_MODE" ]]; then
 
     rm -f "$MERGED_INPUT"
 else
-    # 自动模式: 根据指纹结果逐模式执行
-    FOUND_MODES=()
+    # 自动模式: 根据端口号查表分配到对应模式
+    # 清理旧的临时文件
+    rm -f "$BRUTE_DIR"/temp_mode_*.txt 2>/dev/null || true
 
-    # 按模式编号排序遍历
-    for mode_id in 1 2 3 4 5 7 8; do
-        for fp_file in "${!FINGERPRINT_MODE_MAP[@]}"; do
-            if [[ "${FINGERPRINT_MODE_MAP[$fp_file]}" -eq "$mode_id" ]]; then
-                fp_path="$FINGERPRINT_DIR/$fp_file"
-                if [[ -f "$fp_path" ]] && [[ -s "$fp_path" ]]; then
-                    count=$(wc -l < "$fp_path" | tr -d ' ')
-                    echo "  发现 $fp_file -> 模式 $mode_id ($count 个目标)"
-                    FOUND_MODES+=("$mode_id:$fp_path")
-                fi
-            fi
-        done
+    # 统计发现的端口
+    port_count=0
+    for port_file in "$PORTS_DIR"/*_port.txt; do
+        [[ -f "$port_file" ]] || continue
+        [[ -s "$port_file" ]] || continue
+        port=$(basename "$port_file" _port.txt)
+        modes="${PORT_MODE_MAP[$port]:-}"
+        if [[ -n "$modes" ]]; then
+            port_count=$((port_count + 1))
+        fi
     done
 
-    echo ""
-
-    if [[ ${#FOUND_MODES[@]} -eq 0 ]]; then
-        echo "  未发现可爆破的目标"
+    if [[ "$port_count" -eq 0 ]]; then
+        echo "  未发现可映射的开放端口"
     else
-        for entry in "${FOUND_MODES[@]}"; do
-            mode="${entry%%:*}"
-            input_file="${entry#*:}"
-            run_brute "$mode" "$input_file"
+        # 按端口号分配目标到对应模式
+        for port_file in "$PORTS_DIR"/*_port.txt; do
+            [[ -f "$port_file" ]] || continue
+            [[ -s "$port_file" ]] || continue
+            port=$(basename "$port_file" _port.txt)
+            modes="${PORT_MODE_MAP[$port]:-}"
+
+            if [[ -z "$modes" ]]; then
+                continue
+            fi
+
+            target_count=$(wc -l < "$port_file" | tr -d ' ')
+            echo "  端口 $port -> 模式 [$modes] ($target_count 个目标)"
+
+            IFS=',' read -ra mode_list <<< "$modes"
+            for m in "${mode_list[@]}"; do
+                cat "$port_file" >> "$BRUTE_DIR/temp_mode_${m}.txt"
+            done
         done
+
+        echo ""
+
+        # 逐模式爆破
+        for m in 1 2 3 4 5 6 7 8; do
+            mode_file="$BRUTE_DIR/temp_mode_${m}.txt"
+            [[ -f "$mode_file" ]] || continue
+            [[ -s "$mode_file" ]] || continue
+
+            sort -u -o "$mode_file" "$mode_file"
+            target_count=$(wc -l < "$mode_file" | tr -d ' ')
+            echo ">>> 模式 $m: $target_count 个目标"
+            run_brute "$m" "$mode_file"
+        done
+
+        # 清理临时文件
+        rm -f "$BRUTE_DIR"/temp_mode_*.txt 2>/dev/null || true
     fi
 fi
 
@@ -234,6 +244,5 @@ echo "========================================"
 echo ""
 echo "输出目录:"
 echo "  端口扫描: $PORTS_DIR/"
-echo "  指纹识别: $FINGERPRINT_DIR/"
 echo "  爆破结果: $BRUTE_OUT_DIR/latest/"
 echo "  历史记录: $BRUTE_OUT_DIR/history/"

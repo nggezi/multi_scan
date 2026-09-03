@@ -1,20 +1,19 @@
-# 综合扫描+爆破工具
+# Multi-Scan
 
-端口扫描 → 指纹识别 → 自动匹配爆破模式，一键完成。
+端口扫描 + 端口映射 + 自动爆破，一键完成。
 
 ## 快速开始
 
 ```bash
-# 准备网段文件（每行一个 IP/网段）
+# 1. 安装依赖（首次）
+bash setup.sh
+
+# 2. 准备网段文件（每行一个 IP/网段）
 cp config/subnets.example.txt my_subnets.txt
 # 编辑 my_subnets.txt 填入目标
 
-# 一键执行：扫描 + 指纹 + 爆破
+# 3. 一键执行
 bash scan_all.sh my_subnets.txt
-
-# 强制指定模式（跳过指纹识别）
-bash scan_all.sh my_subnets.txt 1    # XUI
-bash scan_all.sh my_subnets.txt 6    # SSH
 ```
 
 ## 目录结构
@@ -22,16 +21,16 @@ bash scan_all.sh my_subnets.txt 6    # SSH
 ```
 scan/
 ├── scan_all.sh                  # 统一入口
+├── setup.sh                     # 依赖安装脚本
 ├── config/
 │   ├── ports.conf               # 端口扫描配置
-│   ├── rules.conf               # 指纹识别规则
+│   ├── rules.conf               # 指纹识别规则（备用）
 │   ├── config.yaml              # 爆破参数配置
 │   └── subnets.example.txt     # 网段示例
 ├── src/
 │   ├── scanner/                 # 扫描模块
 │   │   ├── scan_ports.sh       # nmap 端口扫描
-│   │   ├── fingerprint.py      # HTTP/HTTPS 指纹识别
-│   │   └── selftest.py         # 本地自检
+│   │   └── fingerprint.py      # HTTP/HTTPS 指纹识别
 │   └── brute/                   # 爆破模块
 │       ├── main.py             # 入口
 │       ├── config.yaml         # 爆破配置
@@ -39,66 +38,70 @@ scan/
 │       └── templates/          # Go 代码模板
 └── output/
     ├── ports/                  # 端口扫描结果（每次覆盖）
-    ├── fingerprint/            # 指纹识别结果（每次覆盖）
     └── brute/
         ├── latest/             # 最新爆破结果
         └── history/            # 历史记录（保留 3 个）
 ```
 
+## 端口→模式映射
+
+根据扫描到的端口号自动匹配爆破模式：
+
+| 端口 | 爆破模式 | 对应服务 |
+|------|----------|----------|
+| 22 | 6 | SSH |
+| 80 | 1,2,3,4,5,7,8 | 所有 Web 面板 |
+| 443 | 1,2,3,4,5,7,8 | 所有 Web 面板 |
+| 8080 | 1,2,3,4,5,7,8 | 所有 Web 面板 |
+| 8443 | 1,2,3,4,5,7,8 | 所有 Web 面板 |
+| 2053 | 1 | 3x-ui 默认端口 |
+| 2083 | 1 | Cloudflare 端口 |
+| 2087 | 1 | Cloudflare 端口 |
+| 2095 | 5 | S-UI 面板端口 |
+| 2096 | 5 | S-UI 订阅端口 |
+| 54321 | 1 | X-UI 原始默认端口 |
+| 8008 | 2 | 哪吒监控默认端口 |
+| 3000 | 2,7 | 哪吒 / Sub-Store |
+| 3001 | 7 | Sub-Store 默认端口 |
+
+共享端口（80/443/8080/8443）会同时尝试所有面板模式，确保不遗漏。
+
 ## 支持的模式
 
-| 模式 | 服务 | 指纹文件 | 说明 |
-|------|------|----------|------|
-| 1 | X-UI / 3x-ui | x-ui.txt | POST /login |
-| 2 | 哪吒监控 | nezha.txt | POST /api/v1/login |
-| 3 | HUI | hui.txt | POST /hui/auth/login |
-| 4 | 咸蛋 / Xboard | xiandan.txt | POST /login |
-| 5 | SUI | sui.txt | POST /app/api/login |
-| 6 | SSH | (无指纹) | 需手动指定 |
-| 7 | Sub-Store | substore.txt | GET 路径探测 |
-| 8 | OpenWrt | openwrt.txt | POST /cgi-bin/luci/ |
+| 模式 | 服务 | 说明 |
+|------|------|------|
+| 1 | X-UI / 3x-ui | POST /login |
+| 2 | 哪吒监控 | POST /api/v1/login |
+| 3 | HUI | POST /hui/auth/login |
+| 4 | 咸蛋 / Xboard | POST /login |
+| 5 | SUI | POST /app/api/login |
+| 6 | SSH | SSH 直连 + 蜜罐检测 |
+| 7 | Sub-Store | GET 路径探测 |
+| 8 | OpenWrt | POST /cgi-bin/luci/ |
 
 ## 配置说明
+
+### config.yaml（爆破参数）
+
+```yaml
+# 并发线程数（建议 100~500）
+XUI_THREADS: 250
+
+# 每批处理数量
+XUI_BATCH_SIZE: 1000
+
+# 输入文件分片行数（内存小改小）
+XUI_LINES_PER_FILE: 5000
+
+# 分片间冷却时间（秒）
+XUI_SLEEP_SECONDS: 2
+```
 
 ### ports.conf（端口扫描）
 
 ```bash
-# 修改扫描端口
-PORTS="22,80,443,8080,54321"
-
-# 修改 nmap 参数
+PORTS="22,53,80,443,8080,8443,2053,2083,2087,2096,54321,8008,3000"
 EXTRA_OPTS="-Pn -T4 -n"
-```
-
-### config.yaml（爆破参数）
-
-```bash
-# 并发数
-XUI_THREADS: 250
-
-# 每批数量
-XUI_BATCH_SIZE: 1000
-
-# 输入文件行数分片
-XUI_LINES_PER_FILE: 5000
-```
-
-### rules.conf（指纹规则）
-
-新增服务指纹，参考现有格式添加 `[section]`。
-
-## SSH 爆破
-
-SSH 没有指纹识别，需要手动指定：
-
-```bash
-# 方式 1: 强制模式 6
-bash scan_all.sh subnets.txt 6
-
-# 方式 2: 准备 SSH 目标文件
-echo "192.168.1.1:22" > ssh_targets.txt
-cd src/brute
-python3 main.py -m 6 -i ssh_targets.txt
 ```
 
 ## 单独使用各模块
@@ -108,13 +111,6 @@ python3 main.py -m 6 -i ssh_targets.txt
 ```bash
 bash src/scanner/scan_ports.sh subnets.txt
 # 结果在 output/ports/
-```
-
-### 仅指纹识别
-
-```bash
-python3 src/scanner/fingerprint.py --result-dir output/ports/ --out-dir output/fingerprint/
-# 结果在 output/fingerprint/
 ```
 
 ### 仅爆破
@@ -127,8 +123,13 @@ python3 main.py -m 1 -i targets.txt
 ## 依赖
 
 - nmap（端口扫描）
-- Python 3.6+
-- Go 1.20+（爆破模块）
-- requests, openpyxl（Python 模块）
+- Python 3.6+ 及 requests, openpyxl 模块
+- Go 1.20+（爆破模块编译）
 
-Linux 下会自动检测并安装缺失依赖。
+Linux 下运行 `bash setup.sh` 自动安装所有依赖。
+
+## 项目结构
+
+- 端口扫描：`src/scanner/scan_ports.sh`
+- 爆破引擎：`src/brute/`（Go + Python 混合，生成 Go 代码并发爆破）
+- 输出目录：`output/brute/latest/`（最新结果）、`output/brute/history/`（历史，保留 3 个）
