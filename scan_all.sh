@@ -22,7 +22,7 @@ BRUTE_OUT_DIR="$OUTPUT_DIR/brute"
 
 # ── 从 config.yaml 解析 SUBNET_URLS ──
 parse_subnet_urls() {
-    local config_file="$CONFIG_DIR/config.yaml"
+    local config_file="$BRUTE_DIR/config.yaml"
     [[ -f "$config_file" ]] || return
 
     local in_section=false
@@ -84,7 +84,7 @@ fetch_urls() {
 
 # ── 交互式选择网段来源 ──
 select_source_interactive() {
-    local config_file="$CONFIG_DIR/config.yaml"
+    local config_file="$BRUTE_DIR/config.yaml"
 
     if [[ ! -f "$config_file" ]]; then
         echo "错误: 配置文件不存在: $config_file" >&2
