@@ -1,16 +1,7 @@
 // Handler: 咸蛋面板 (模式 4)
 // POST /login — application/json
 // 响应: {"success": true, "data": {"token": "..."}}
-
-import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"strings"
-	"time"
-)
+// import 由 generators.py 统一生成
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
 	client := &http.Client{}

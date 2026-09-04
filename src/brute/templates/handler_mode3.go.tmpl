@@ -1,16 +1,7 @@
 // Handler: HUI 面板 (模式 3)
 // POST /hui/auth/login — application/json;charset=UTF-8
 // 响应: {"data": {"accessToken": "..."}}
-
-import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"strings"
-	"time"
-)
+// import 由 generators.py 统一生成
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
 	client := &http.Client{}

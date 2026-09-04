@@ -1,20 +1,6 @@
 // Sub Store 路径探测 runner —— 模式 7
 // 通过探测 /api/utils/env 判断有效路径
-
-package main
-
-import (
-	"context"
-	"fmt"
-	"io"
-	"os"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
-	"runtime"
-	"net/http"
-)
+// package main 和 import 由 generators.py 统一生成
 
 var wg sync.WaitGroup
 var semaphore = make(chan struct{}, {{.SemaphoreSize}})

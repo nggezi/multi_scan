@@ -1,17 +1,6 @@
 // 通用爆破 runner —— 适用于模式 1-5, 8 (HTTP/HTTPS POST 登录)
 // 由 Python 生成器填充 {{.XXX}} 占位符
-
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
-)
+// package main 和 import 由 generators.py 统一生成
 
 var wg sync.WaitGroup
 var semaphore = make(chan struct{}, {{.SemaphoreSize}})

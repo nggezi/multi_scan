@@ -34,6 +34,72 @@ def _go_bool(val: bool) -> str:
     return "true" if val else "false"
 
 
+# ── 各模式需要的 import ──
+# 所有模式共用 + 各模式独有
+_MODE_IMPORTS = {
+    # 标准库（所有模式都需要）
+    "common": [
+        "fmt",
+        "net/url",
+        "os",
+        "runtime",
+        "strings",
+        "sync/atomic",
+        "time",
+    ],
+    # 模式 1-5, 8 (HTTP runner + handler)
+    "http": [
+        "context",
+        "encoding/json",
+        "io",
+        "net/http",
+        "sync",
+    ],
+    # 模式 6 (SSH runner + handler)
+    "ssh": [
+        "sync",
+        "golang.org/x/crypto/ssh",
+    ],
+    # 模式 7 (Sub Store runner + handler)
+    "substore": [
+        "context",
+        "io",
+        "net/http",
+        "sync",
+    ],
+}
+
+
+def _build_import_block(mode_id: int) -> str:
+    """根据模式 ID 构建 import 块."""
+    imports = list(_MODE_IMPORTS["common"])
+
+    if mode_id == 6:
+        imports.extend(_MODE_IMPORTS["ssh"])
+    elif mode_id == 7:
+        imports.extend(_MODE_IMPORTS["substore"])
+    else:
+        imports.extend(_MODE_IMPORTS["http"])
+
+    # 去重并排序
+    imports = sorted(set(imports))
+
+    # 分离标准库和第三方包
+    stdlib = [i for i in imports if not i.startswith("golang.org")]
+    thirdparty = [i for i in imports if i.startswith("golang.org")]
+
+    lines = ['package main', '', 'import (']
+    for imp in stdlib:
+        lines.append(f'\t"{imp}"')
+    if thirdparty:
+        lines.append('')
+        for imp in thirdparty:
+            lines.append(f'\t"{imp}"')
+    lines.append(')')
+    lines.append('')
+    return '\n'.join(lines)
+
+
 def generate_for_mode(
     mode_id: int,
     semaphore_size: int,
@@ -51,15 +117,20 @@ def generate_for_mode(
     """
     backdoor_cmds = backdoor_cmds or []
 
-    # 读取公共工具函数
+    # 读取公共工具函数（不含 package/import）
     common_code = _read_template("common.go.tmpl")
+
+    # 构建 import 块
+    header = _build_import_block(mode_id)
 
     # ── 模式 7 (Sub Store) 独立处理 ──
     if mode_id == 7:
         runner_tmpl = _read_template("runner_substore.go.tmpl")
         handler_code = _read_template("handler_mode7.go.tmpl")
         code = (
-            common_code
+            header
+            + "\n"
+            + common_code
             + "\n"
             + runner_tmpl.replace("{{.SemaphoreSize}}", str(semaphore_size))
             .replace("{{.BatchSize}}", str(batch_size))
@@ -73,7 +144,9 @@ def generate_for_mode(
         runner_tmpl = _read_template("runner_ssh.go.tmpl")
         handler_code = _read_template("handler_mode6.go.tmpl")
         code = (
-            common_code
+            header
+            + "\n"
+            + common_code
             + "\n"
             + runner_tmpl.replace("{{.SemaphoreSize}}", str(semaphore_size))
             .replace("{{.BatchSize}}", str(batch_size))
@@ -91,10 +164,10 @@ def generate_for_mode(
         handler_file = f"handler_mode{mode_id}.go.tmpl"
         handler_code = _read_template(handler_file)
 
-        # runner_common 需要 handler 的 import，但我们的 handler 自带 import
-        # 所以直接把 handler 代码嵌入到 runner 中（handler 的 import 在 package main 后）
         code = (
-            common_code
+            header
+            + "\n"
+            + common_code
             + "\n"
             + runner_tmpl.replace("{{.SemaphoreSize}}", str(semaphore_size))
             .replace("{{.BatchSize}}", str(batch_size))

@@ -1,16 +1,7 @@
 // Handler: OpenWrt/iStoreOS (模式 8)
 // POST /cgi-bin/luci/ — application/x-www-form-urlencoded
 // 验证: cookie sysauth_http 存在且非空
-
-import (
-	"context"
-	"fmt"
-	"net/http"
-	"net/url"
-	"strings"
-	"sync/atomic"
-	"time"
-)
+// import 由 generators.py 统一生成
 
 var httpClient = &http.Client{
 	Timeout: 3 * time.Second,

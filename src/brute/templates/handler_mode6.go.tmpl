@@ -1,12 +1,6 @@
 // Handler: SSH (模式 6)
 // 直接 SSH 连接 + 蜜罐检测 + 可选后门部署
-
-import (
-	"fmt"
-	"strings"
-	"sync/atomic"
-	"time"
-)
+// import 由 generators.py 统一生成
 
 func processIP(ipPort string, file *os.File, usernames []string, passwords []string) {
 	semaphore <- struct{}{}

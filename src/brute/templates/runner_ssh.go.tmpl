@@ -1,19 +1,6 @@
 // SSH 爆破 runner —— 模式 6
 // 特性：蜜罐检测、后门部署、超时保护、进度卡死自动重试
-
-package main
-
-import (
-	"fmt"
-	"os"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
-	"runtime"
-
-	"golang.org/x/crypto/ssh"
-)
+// package main 和 import 由 generators.py 统一生成
 
 var wg sync.WaitGroup
 var semaphore = make(chan struct{}, {{.SemaphoreSize}})

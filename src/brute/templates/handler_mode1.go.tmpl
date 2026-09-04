@@ -1,16 +1,7 @@
 // Handler: XUI 面板 (模式 1)
 // POST /login — application/x-www-form-urlencoded
 // 响应: {"success": true}
-
-import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"strings"
-	"time"
-)
+// import 由 generators.py 统一生成
 
 func postRequest(ctx context.Context, url string, username string, password string) (*http.Response, error) {
 	client := &http.Client{}

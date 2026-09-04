@@ -1,15 +1,6 @@
 // Handler: Sub Store (模式 7)
 // GET 路径探测 — 检测 /api/utils/env 返回 status=success
-
-import (
-	"context"
-	"fmt"
-	"io"
-	"net/http"
-	"strings"
-	"sync/atomic"
-	"time"
-)
+// import 由 generators.py 统一生成
 
 func sendRequest(ctx context.Context, client *http.Client, fullURL string) bool {
 	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
