@@ -122,3 +122,15 @@ XUI_NO_EXCEL: false
 #  环境变量: GOSUMDB
 # ---------------------------------------------------------------------------
 # GOSUMDB: "sum.golang.google.cn"
+
+# ---------------------------------------------------------------------------
+#  网段来源 URL（用于 scan_all.sh 交互式拉取）
+#  格式: 别名|URL，每行一条
+#  scan_all.sh 不传参启动时，展示菜单供选择拉取哪些
+# ---------------------------------------------------------------------------
+SUBNET_URLS:
+  国内资产|https://example.com/assets/cn_subnets.txt
+  海外资产|https://example.com/assets/overseas_subnets.txt
+  CDN厂商|https://example.com/assets/cdn_ranges.txt
+  云服务商|https://example.com/assets/cloud_ranges.txt
+  运营商|https://example.com/assets/isp_ranges.txt

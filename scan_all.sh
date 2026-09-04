@@ -3,35 +3,14 @@
 # scan_all.sh - 一键端口扫描+爆破
 #
 # 用法:
-#   bash scan_all.sh <网段文件> [爆破模式]
-#
-# 爆破模式:
-#   - 不指定: 根据端口号自动匹配爆破模式
-#   - 数字1-8: 强制使用指定模式（跳过端口映射，直接用该模式爆破所有开放端口）
+#   bash scan_all.sh                    # 交互式选择网段来源
+#   bash scan_all.sh <网段文件>          # 直接用本地文件
+#   bash scan_all.sh <网段文件> <模式>   # 指定文件+强制模式
 #
 
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-
-# ── 参数检查 ──
-if [[ $# -lt 1 ]]; then
-    echo "用法: bash scan_all.sh <网段文件> [爆破模式(1-8)]" >&2
-    echo "" >&2
-    echo "示例:" >&2
-    echo "  bash scan_all.sh subnets.txt           # 端口映射自动爆破" >&2
-    echo "  bash scan_all.sh subnets.txt 1         # 强制模式1爆破" >&2
-    echo "  bash scan_all.sh subnets.txt 6         # 强制SSH爆破" >&2
-    exit 1
-fi
-
-SUBNET_FILE="$1"
-FORCE_MODE="${2:-}"
-
-if [[ ! -f "$SUBNET_FILE" ]]; then
-    echo "错误: 网段文件不存在: $SUBNET_FILE" >&2
-    exit 1
-fi
 
 # ── 路径定义 ──
 CONFIG_DIR="$SCRIPT_DIR/config"
@@ -40,6 +19,135 @@ BRUTE_DIR="$SCRIPT_DIR/src/brute"
 OUTPUT_DIR="$SCRIPT_DIR/output"
 PORTS_DIR="$OUTPUT_DIR/ports"
 BRUTE_OUT_DIR="$OUTPUT_DIR/brute"
+
+# ── 从 config.yaml 解析 SUBNET_URLS ──
+parse_subnet_urls() {
+    local config_file="$CONFIG_DIR/config.yaml"
+    [[ -f "$config_file" ]] || return
+
+    local in_section=false
+    while IFS= read -r line; do
+        # 检测 SUBNET_URLS: 开头
+        if [[ "$line" =~ ^SUBNET_URLS: ]]; then
+            in_section=true
+            continue
+        fi
+        if $in_section; then
+            # 缩进行 = 列表项
+            if [[ "$line" =~ ^[[:space:]]+(.+) ]]; then
+                local item="${BASH_REMATCH[1]}"
+                # 跳过注释
+                [[ "$item" =~ ^# ]] && continue
+                echo "$item"
+            else
+                # 非缩进行 → 退出列表
+                break
+            fi
+        fi
+    done < "$config_file"
+}
+
+# ── 拉取 URL 内容并合并去重 ──
+fetch_urls() {
+    local output_file="$1"
+    shift
+    local urls=("$@")
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    local idx=1
+
+    for url in "${urls[@]}"; do
+        echo "  拉取 [$idx/${#urls[@]}]: $url"
+        local tmp_file="$tmp_dir/source_$idx.txt"
+        if curl -sS --connect-timeout 10 --max-time 30 -o "$tmp_file" "$url" 2>/dev/null; then
+            # 过滤: 去掉注释行、空行、trim 空格
+            grep -v '^\s*#' "$tmp_file" 2>/dev/null \
+                | grep -v '^\s*$' \
+                | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
+                >> "$output_file"
+            local count
+            count=$(wc -l < "$tmp_file" | tr -d ' ')
+            echo "    获取 $count 行"
+        else
+            echo "    拉取失败，跳过"
+        fi
+        idx=$((idx + 1))
+    done
+
+    rm -rf "$tmp_dir"
+
+    # 全局去重
+    if [[ -f "$output_file" ]] && [[ -s "$output_file" ]]; then
+        sort -u -o "$output_file" "$output_file"
+    fi
+}
+
+# ── 交互式选择网段来源 ──
+select_source_interactive() {
+    local config_file="$CONFIG_DIR/config.yaml"
+
+    if [[ ! -f "$config_file" ]]; then
+        echo "错误: 配置文件不存在: $config_file" >&2
+        exit 1
+    fi
+
+    # 解析 URL 列表
+    local -a url_aliases=()
+    local -a url_list=()
+
+    while IFS='|' read -r alias url; do
+        url_aliases+=("$alias")
+        url_list+=("$url")
+    done < <(parse_subnet_urls)
+
+    if [[ ${#url_list[@]} -eq 0 ]]; then
+        echo "错误: config.yaml 中未配置 SUBNET_URLS" >&2
+        echo "请在 config/config.yaml 中添加 SUBNET_URLS 配置" >&2
+        exit 1
+    fi
+
+    echo "========================================"
+    echo "  端口扫描 + 自动爆破"
+    echo "========================================"
+    echo ""
+    echo "请选择网段来源："
+    echo "  1. 全部"
+    local i
+    for ((i=0; i<${#url_aliases[@]}; i++)); do
+        echo "  $((i+2)). ${url_aliases[$i]}"
+    done
+    echo "  $((${#url_aliases[@]}+2)). 使用本地文件"
+    echo ""
+    read -rp "输入数字（默认1）: " choice
+    choice="${choice:-1}"
+
+    local total_options=$((${#url_aliases[@]}+2))
+
+    if [[ "$choice" -ge 1 && "$choice" -le "$total_options" ]]; then
+        if [[ "$choice" -eq "$total_options" ]]; then
+            # 本地文件
+            read -rp "请输入文件路径: " local_file
+            if [[ ! -f "$local_file" ]]; then
+                echo "错误: 文件不存在: $local_file" >&2
+                exit 1
+            fi
+            echo "$local_file"
+            return
+        elif [[ "$choice" -eq 1 ]]; then
+            # 全部
+            echo "${url_list[@]}"
+            return
+        else
+            # 指定 URL
+            local idx=$((choice-2))
+            echo "${url_list[$idx]}"
+            return
+        fi
+    fi
+
+    echo "无效选择" >&2
+    exit 1
+}
 
 # ── 端口→模式映射 ──
 declare -A PORT_MODE_MAP=(
@@ -58,6 +166,57 @@ declare -A PORT_MODE_MAP=(
     [3000]="2,7"
     [3001]="7"
 )
+
+# ════════════════════════════════════════
+# 解析输入参数
+# ════════════════════════════════════════
+SUBNET_FILE=""
+FORCE_MODE=""
+TEMP_SUBNET_FILE=""
+
+if [[ $# -eq 0 ]]; then
+    # 交互模式: 选择网段来源
+    source_choice=$(select_source_interactive)
+
+    if [[ -f "$source_choice" ]]; then
+        # 本地文件
+        SUBNET_FILE="$source_choice"
+    else
+        # URL 列表 → 拉取
+        TEMP_SUBNET_FILE="$SCRIPT_DIR/temp_subnets.txt"
+        echo ""
+        echo ">>> 拉取网段..."
+        echo ""
+        fetch_urls "$TEMP_SUBNET_FILE" $source_choice
+
+        if [[ ! -s "$TEMP_SUBNET_FILE" ]]; then
+            echo "错误: 未拉取到任何网段" >&2
+            rm -f "$TEMP_SUBNET_FILE"
+            exit 1
+        fi
+
+        local_count=$(wc -l < "$TEMP_SUBNET_FILE" | tr -d ' ')
+        echo ""
+        echo "  共拉取 $local_count 个目标"
+        echo ""
+        SUBNET_FILE="$TEMP_SUBNET_FILE"
+    fi
+
+elif [[ $# -eq 1 ]]; then
+    SUBNET_FILE="$1"
+    if [[ ! -f "$SUBNET_FILE" ]]; then
+        echo "错误: 网段文件不存在: $SUBNET_FILE" >&2
+        exit 1
+    fi
+
+elif [[ $# -ge 2 ]]; then
+    SUBNET_FILE="$1"
+    FORCE_MODE="$2"
+    if [[ ! -f "$SUBNET_FILE" ]]; then
+        echo "错误: 网段文件不存在: $SUBNET_FILE" >&2
+        exit 1
+    fi
+fi
 
 echo "========================================"
 echo "  端口扫描 + 自动爆破"
@@ -233,6 +392,9 @@ if [[ -d "$BRUTE_OUT_DIR/history" ]]; then
         done
     fi
 fi
+
+# 清理临时拉取的网段文件
+[[ -n "$TEMP_SUBNET_FILE" && -f "$TEMP_SUBNET_FILE" ]] && rm -f "$TEMP_SUBNET_FILE"
 
 # 回到项目根目录
 cd "$SCRIPT_DIR"

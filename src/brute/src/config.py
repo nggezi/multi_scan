@@ -83,23 +83,54 @@ def _parse_yaml_value(raw: str) -> Any:
 
 
 def _load_yaml_file(path: Path) -> Dict[str, Any]:
-    """读取 config.yaml 并返回键值对字典."""
+    """读取 config.yaml 并返回键值对字典.
+
+    支持两种格式:
+      1. 单行: KEY: value
+      2. 多行列表: KEY:\n  item1\n  item2  (缩进的续行作为列表项)
+    """
     result: Dict[str, Any] = {}
     if not path.exists():
         return result
 
-    content = path.read_text(encoding="utf-8")
-    for line in content.splitlines():
-        stripped = line.strip()
+    lines = path.read_text(encoding="utf-8").splitlines()
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
         # 跳过注释和空行
         if not stripped or stripped.startswith("#"):
+            i += 1
             continue
+
         # 解析 key: value
         match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$", stripped)
         if match:
             key = match.group(1)
-            value = _parse_yaml_value(match.group(2))
-            result[key] = value
+            value_str = match.group(2).strip()
+
+            if value_str == "":
+                # 可能是多行列表，收集缩进续行
+                items = []
+                i += 1
+                while i < len(lines):
+                    next_line = lines[i]
+                    # 空行结束列表
+                    if next_line.strip() == "":
+                        break
+                    # 缩进行是列表项
+                    if next_line.startswith("  ") or next_line.startswith("\t"):
+                        item = next_line.strip()
+                        if item and not item.startswith("#"):
+                            items.append(item)
+                        i += 1
+                    else:
+                        break
+                result[key] = items if items else value_str
+                continue
+            else:
+                result[key] = _parse_yaml_value(value_str)
+
+        i += 1
 
     return result
 
@@ -158,6 +189,34 @@ TELEGRAM_BOT_TOKEN: str = _cfg["TG_BOT_TOKEN"]
 TELEGRAM_CHAT_ID: str = _cfg["TG_CHAT_ID"]
 GOPROXY: str = _cfg["GOPROXY"]
 GOSUMDB: str = _cfg["GOSUMDB"]
+
+
+def _parse_subnet_urls(raw) -> dict:
+    """解析 SUBNET_URLS 配置为 {别名: URL} 字典.
+
+    支持:
+      - 多行列表: ["别名|URL", ...]
+      - 单行逗号分隔: "别名1|URL1,别名2|URL2"
+    """
+    entries = {}
+    if isinstance(raw, list):
+        items = raw
+    elif isinstance(raw, str) and raw.strip():
+        items = [s.strip() for s in raw.split(",") if s.strip()]
+    else:
+        return entries
+
+    for item in items:
+        if "|" in item:
+            alias, url = item.split("|", 1)
+            entries[alias.strip()] = url.strip()
+        else:
+            # 没有别名，用 URL 本身作标识
+            entries[item.strip()] = item.strip()
+    return entries
+
+
+SUBNET_URLS: dict = _parse_subnet_urls(_cfg.get("SUBNET_URLS", []))
 
 # ── 面板模式常量（不可配置，纯常量）───────────────────────
 PANEL_MODES = {
