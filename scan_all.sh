@@ -106,18 +106,18 @@ select_source_interactive() {
         exit 1
     fi
 
-    echo "========================================"
-    echo "  端口扫描 + 自动爆破"
-    echo "========================================"
-    echo ""
-    echo "请选择网段来源："
-    echo "  1. 全部"
+    echo "========================================" >&2
+    echo "  端口扫描 + 自动爆破" >&2
+    echo "========================================" >&2
+    echo "" >&2
+    echo "请选择网段来源：" >&2
+    echo "  1. 全部" >&2
     local i
     for ((i=0; i<${#url_aliases[@]}; i++)); do
-        echo "  $((i+2)). ${url_aliases[$i]}"
+        echo "  $((i+2)). ${url_aliases[$i]}" >&2
     done
-    echo "  $((${#url_aliases[@]}+2)). 使用本地文件"
-    echo ""
+    echo "  $((${#url_aliases[@]}+2)). 使用本地文件" >&2
+    echo "" >&2
     read -rp "输入数字（默认1）: " choice
     choice="${choice:-1}"
 
@@ -126,7 +126,7 @@ select_source_interactive() {
     if [[ "$choice" -ge 1 && "$choice" -le "$total_options" ]]; then
         if [[ "$choice" -eq "$total_options" ]]; then
             # 本地文件
-            read -rp "请输入文件路径: " local_file
+            read -rp "请输入文件路径: " local_file >&2
             if [[ ! -f "$local_file" ]]; then
                 echo "错误: 文件不存在: $local_file" >&2
                 exit 1
